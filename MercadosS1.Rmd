@@ -1,0 +1,616 @@
+---
+title: "Mercado de capitales"
+author: "Valentina Munoz - Equipo laboratorio FINTRADE"
+date: "06 de septiembre de 2020"
+output: html_document
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+```
+
+### Descargar datos
+
+Para este caso se descargaran las acciones de Apple (AAPL), Facebook (FB) y Amazon (AMZN)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(quantmod)
+Nombres = c ("FB","AMZN","AAPL") # Vector de caracteres
+getSymbols(Nombres,src = "yahoo",from = "2018-09-06",to = "2020-09-06")
+```
+
+### Rendimientos
+
+Aqui estaran los rendimientos diarios de cada accion y se creara un vector de rendimientos para identificar la correlacion de los mismos
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fb=Delt(FB$FB.Close)[-1]
+amzn=Delt(AMZN$AMZN.Close)[-1]
+aapl=Delt(AAPL$AAPL.Close)[-1]
+
+rend=cbind(fb,amzn,aapl) # Vector de rendimientos
+colnames(rend)=c("FB","AMZN","AAPL")
+
+```
+
+### Rendimientos y desviacion estandar de un mes
+
+La forma de volver los rendimientos a una periodicidad mensual es multiplicando los diarios por 20, en caso de ser anual, se multiplicara por 250 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mfb=mean(rend$FB)*20
+mamzn=mean(rend$AMZN)*20
+maapl=mean(rend$AAPL)*20
+
+sdfb=sd(rend$FB)*sqrt(20)
+sdamzn=sd(rend$AMZN)*sqrt(20)
+sdaapl=sd(rend$AAPL)*sqrt(20)
+```
+
+## Graficos de Precios de cierre 
+
+Aqui podremos ver de manera grafica el comportamiento de los precios en el periodo de tiempo seleccionado y las variaciones de las rentabilides
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(3,2)) # Ubicar mejor la gr·fica
+plot(FB$FB.Close,col = "dodgerblue2",main = "FB")
+plot(fb,col="dodgerblue2",main = Nombres[1])
+
+plot(AMZN$AMZN.Close,col = "gold",main = "AMZN")
+plot(amzn,col="gold",main = Nombres[2])
+
+plot(AAPL$AAPL.Close,col = "antiquewhite3",main = "AAPL")
+plot(aapl,col="antiquewhite3",main = Nombres[3])
+```
+
+#### TBill Mensual
+
+Esta sera necesaria para poder calcular el indice de sharpe por cada una de las acciones seleccionadas, esta se puede encontrar en la pagina oficial de la Reserva Federal (FRED): https://fred.stlouisfed.org/series/DTB3
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+TBill=0.12/100 # Tasa efectiva anual, 1 de septiembre 
+TBillmensual=(1+TBill)^(1/12)-1
+TBillmensual
+```
+
+_____________________________________________________________________________________
+
+#### Indice de Sharpe por accion
+
+Este indice mide numericamente la relacion Rentabilidad / Volatilidad Historica (desviacion standard) de cada accion, es decir, cuanto mayor sea el indice de Sharpe,  mejor es la rentabilidad de la accion en relacion a la cantidad de riesgo que se ha tomado en la inversion.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+symbols=c("FB","AMZN","AAPL")
+
+ISfb= (mfb-TBillmensual)/sdfb # Indice de Sharpe de FB
+names(ISfb)=symbols[1]
+ISfb
+
+ISamzn= (mamzn-TBillmensual)/sdamzn # Indice de Sharpe de AMZN
+names(ISamzn)=symbols[2]
+ISamzn
+
+ISaapl= (maapl-TBillmensual)/sdaapl # Indice de Sharpe de AAPL
+names(ISaapl)=symbols[3]
+ISaapl
+
+```
+
+#### Matriz de correlaciones
+
+Aqui se observa la incidencia o el impacto que tiene una accion en relacion a otra
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+corrp=cor(rend) # Correlacion de los rendimientos
+library(corrplot)
+corrplot(corrp, method = "number") # Gr·fica de correlacion
+```
+
+_____________________________________________________________________________________
+
+###Teoria del portafolio
+
+#### Cartera de varianza del minimo global
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mu.vec=cbind(mfb,mamzn,maapl) # Vector de rentabilidades de las acciones
+sigma.mat=var(rend)*20 #Matriz de varianzas y covarianzas de los rendimiento mensuales
+n=3 # Numero de acciones
+
+top=cbind(2*sigma.mat,rep(1,n))
+bot=c(rep(1,n),0)
+MatrizA=rbind(top,bot) 
+b=c(rep(0,n),1)
+z=solve(MatrizA)%*%b # Matriz inversa de Matriz A
+
+wmin=z[1:n]
+names(wmin)=c("FB","AMZN","AAPL")
+wmin
+
+m.min=c(mu.vec%*%wmin)
+names(m.min)=("Rentabilidad")
+m.min
+
+sigma2.min=t(wmin)%*%sigma.mat%*%wmin
+sigma.min=c(sqrt(sigma2.min))
+names(sigma.min)=("Volatilidad")
+sigma.min
+
+```
+
+### Grafica de los pesos
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+barplot(wmin,main = "Pesos del portafolio minima varianza", xlab = "Acciones", ylab = "pesos", col = c("blue","gold","gray"))
+```
+
+### Maximizacion con un portafolio
+
+### Maximizacion con la rentabilidad igual a Facebook
+
+#### Pesos del portafolio (FB)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+n=3
+sigma.mat=var(rend)*20
+top=cbind(2*sigma.mat,t(mu.vec),rep(1,n))# Incluir el vector de rentabilidad
+mit=c(mu.vec,0,0)# Restriccion de acuerdo a la Rentabilidad de los activos
+bot=c(rep(1,n),0,0)# Restriccion de los pesos
+A=rbind(top,mit,bot)# Construccion incluyendo mit
+b=c(rep(0,n),mu.vec[1],1)# Con rentabilidad objetivo
+z=solve(A)%*%b #solve genera la inversa de A y para multiplicar 
+wfb=z[1:n]
+names(wfb)=c("FB","AMZN","AAPL")
+wfb
+barplot(wfb, main = "Pesos del portafolio (FB)", xlab = "Acciones", ylab = "Pesos", col = c("blue", "gold", "gray"))
+```
+
+#### Rendimiento del portafolio (FB)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+m.fb=mu.vec%*%wfb# Ecuacion rendimientos del portafolio
+m.fb
+```
+#### Volatilidad del portafolio (FB)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sigma2.fb=t(wfb)%*%sigma.mat%*%wfb #Ecuacion varianza del portafolio
+sigma.fb=sqrt(sigma2.fb) #Volatilidad
+sigma.fb
+```
+
+----------------------------------------------------------------------------------------
+
+### Maximizacion con la rentabilidad igual a Amazon
+
+#### Pesos del portafolio (AMZN)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+n=3
+sigma.mat=var(rend)*20
+top=cbind(2*sigma.mat,t(mu.vec),rep(1,n))# Incluir el vector de rentabilidad
+mit=c(mu.vec,0,0)# Restriccion de acuerdo a la Rentabilidad de los activos
+bot=c(rep(1,n),0,0)# Restriccion de los pesos
+A=rbind(top,mit,bot)# Construccion incluyendo mit
+b=c(rep(0,n),mu.vec[2],1)# Con rentabilidad objetivo
+z=solve(A)%*%b #solve genera la inversa de A y para multiplicar 
+wamzn=z[1:n]
+names(wamzn)=c("FB","AMZN","AAPL")
+wamzn
+barplot(wamzn, main = "Pesos del portafolio (AMZN)", xlab = "Acciones", ylab = "Pesos", col = c("blue", "gold", "gray"))
+```
+
+#### Rendimiento del portafolio (AMZN)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+m.amzn=mu.vec%*%wamzn# Ecuacion rendimientos del portafolio
+m.amzn
+```
+#### Volatilidad del portafolio (AMZN)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sigma2.amzn=t(wamzn)%*%sigma.mat%*%wamzn #Ecuacion varianza del portafolio
+sigma.amzn=sqrt(sigma2.amzn) #Volatilidad
+sigma.amzn
+```
+
+----------------------------------------------------------------------------------------
+
+### Maximizacion con la rentabilidad igual a Apple
+
+#### Pesos del portafolio (AAPL)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+n=3
+sigma.mat=var(rend)*20
+top=cbind(2*sigma.mat,t(mu.vec),rep(1,n))# Incluir el vector de rentabilidad
+mit=c(mu.vec,0,0)# Restriccion de acuerdo a la Rentabilidad de los activos
+bot=c(rep(1,n),0,0)# Restriccion de los pesos
+A=rbind(top,mit,bot)# Construccion incluyendo mit
+b=c(rep(0,n),mu.vec[3],1)# Con rentabilidad objetivo
+z=solve(A)%*%b #solve genera la inversa de A y para multiplicar 
+waapl=z[1:n]
+names(waapl)=c("FB","AMZN","AAPL")
+waapl
+barplot(waapl, main = "Pesos del portafolio (AAPL)", xlab = "Acciones", ylab = "Pesos", col = c("blue", "gold", "gray"))
+```
+
+#### Rendimiento del portafolio (AMZN)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+m.aapl=mu.vec%*%waapl# Ecuacion rendimientos del portafolio
+m.aapl
+```
+#### Volatilidad del portafolio (AMZN)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sigma2.aapl=t(waapl)%*%sigma.mat%*%waapl #Ecuacion varianza del portafolio
+sigma.aapl=sqrt(sigma2.aapl) #Volatilidad
+sigma.aapl
+```
+
+----------------------------------------------------------------------------------------
+
+### Maximizacion con la rentabilidad igual al Rendimiento Optimo
+
+#### Pesos del portafolio (RO)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+n=3
+ro=0.0219
+sigma.mat=var(rend)*20
+top=cbind(2*sigma.mat,t(mu.vec),rep(1,n))# Incluir el vector de rentabilidad
+mit=c(mu.vec,0,0)# Restricci√≥n de acuerdo a la Rentabilidad de los activos
+bot=c(rep(1,n),0,0)# Restricci√≥n de los pesos
+A=rbind(top,mit,bot)# Construcci√≥n incluyendo mit
+b=c(rep(0,n),ro,1)# COn rentabilidad objetivo
+z=solve(A)%*%b #solve genera la inversa de A y para multiplicar 
+wro=z[1:n]
+names(wro)=c("FB","AMZN","AAPL")
+wro
+barplot(wro, main = "Pesos del portafolio (RO)", xlab = "Acciones", ylab = "Pesos", col = c("blue", "gold", "gray"))
+```
+
+#### Rentabilidad del portafolio (RO)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+m.ro=mu.vec%*%wro# Ecuacion rendimientos del portafolio
+m.ro
+```
+#### Volatilidad del portafolio (RO)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sigma2.ro=t(wro)%*%sigma.mat%*%wro#Ecuacion varianza del portafolio
+sigma.ro=sqrt(sigma2.ro)#Volatilidad
+sigma.ro
+```
+
+_____________________________________________________________________________________
+
+### Grafico de portafolios
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot(sigma.min,m.min,type="b", col="pink",pch=16, xlim=c(0.085,0.115),ylim = c(0.01,0.045),main="Portafolios",xlab = "Volatilidad",ylab="Rendimiento")
+points(sdfb,mfb,col="blue",pch=16)
+points(sdamzn,mamzn,col="gold",pch=16)
+points(sdaapl,maapl,col="gray",pch=16)
+
+points(sigma.fb,m.fb,col="blue",pch=16)
+points(sigma.amzn,m.amzn,col="gold",pch=16)
+points(sigma.aapl,m.aapl,col="gray",pch=16)
+
+points(sigma.ro,m.ro ,col="black",pch=16)
+
+text(sigma.min,m.min,labels = "Global Min",pos = 4)
+text(sdfb,mfb,labels="FB",pos=4)
+text(sdamzn,mamzn,labels="AMZN",pos=4)
+text(sdaapl,maapl,labels="AAPL",pos=4)
+
+text(sigma.fb,m.fb,labels="P1",pos=4)
+text(sigma.amzn,m.amzn,labels="P2",pos=4)
+text(sigma.aapl,m.aapl,labels="P3",pos=4)
+
+text(sigma.ro,m.ro,labels="P7",pos=4)
+```
+
+
+### Curva de frontera eficiente
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sigma.gro=t(wmin)%*%sigma.mat%*%wro
+rhogro=sigma.gro/(sigma.ro*sigma.min) #Correlacion entre protafolio con nuestra rent con el min globlal
+
+a1=seq(from=-3.5,to=2.5,by=0.06)
+n.a=length(a1)
+z.mat=matrix(0, n.a,n)
+colnames(z.mat)=c("FB","AMZN","AAPL")
+mu.z=rep(0, n.a)
+sig2.z=rep(0, n.a)
+for (i in 1:n.a) {
+  z.mat[i, ] = a1[i]*wmin + (1-a1[i])*wro
+  mu.z[i] = a1[i]*m.min + (1-a1[i])*m.ro
+  sig2.z[i] = a1[i]^2 * sigma2.min + (1-a1[i])^2 * sigma2.ro + 2*a1[i]*(1-a1[i])*sigma.gro
+} 
+sig.z=sqrt(sig2.z)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot(sigma.min,m.min,type="b", col="pink",pch=16, xlim=c(0.085,0.13),ylim = c(0.01,0.05),main="Portafolios",xlab = "Volatilidad",ylab="Rendimiento",cex=2)
+
+points(sdfb,mfb,col="blue",pch=16)
+points(sdamzn,mamzn,col="gold",pch=16)
+points(sdaapl,maapl,col="gray",pch=16)
+
+points(sigma.fb,m.fb,col="blue",pch=16)
+points(sigma.amzn,m.amzn,col="gold",pch=16)
+points(sigma.aapl,m.aapl,col="gray",pch=16)
+
+points(sigma.ro,m.ro ,col="black",pch=16,cex=2)
+points(sig.z,mu.z,col="deepskyblue4",pch=15)
+
+text(sigma.min,m.min,labels = "Global Min",pos = 4)
+text(sdfb,mfb,labels="FB",pos=4)
+text(sdamzn,mamzn,labels="AMZN",pos=4)
+text(sdaapl,maapl,labels="AAPL",pos=4)
+
+text(sigma.fb,m.fb,labels="P1",pos=4)
+text(sigma.amzn,m.amzn,labels="P2",pos=4)
+text(sigma.aapl,m.aapl,labels="P3",pos=4)
+
+text(sigma.ro,m.ro,labels="P7",pos=4)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Portafolio optimo
+
+rf=TBillmensual
+sigma.inv.mat = solve(sigma.mat)
+one.vec = rep(1, n)
+mu.minus.rf = mu.vec - rf*one.vec
+top.mat = sigma.inv.mat%*%t(mu.minus.rf)
+bot.val = as.numeric(t(one.vec)%*%top.mat)
+t.vec = top.mat[,1]/bot.val
+mu.t =mu.vec%*% t.vec
+sig2.t = as.numeric(t(t.vec)%*%sigma.mat%*%t.vec)
+sig.t = sqrt(sig2.t)
+```
+
+### Linea CAL
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+x.t = seq(0.0, 2, by=0.02)
+mu.pe = rf + x.t*(mu.t - rf)
+sig.pe = x.t*sig.t 
+slope.t = (mu.t - rf)/sig.t
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot(sigma.min,m.min,type="b", col="pink",pch=16, xlim=c(0.085,0.13),ylim = c(0.01,0.05),main="Portafolios",xlab = "Volatilidad",ylab="Rendimiento",cex=2)
+
+points(sdfb,mfb,col="blue",pch=16)
+points(sdamzn,mamzn,col="gold",pch=16)
+points(sdaapl,maapl,col="gray",pch=16)
+
+points(sigma.fb,m.fb,col="blue",pch=16)
+points(sigma.amzn,m.amzn,col="gold",pch=16)
+points(sigma.aapl,m.aapl,col="gray",pch=16)
+
+points(sigma.ro,m.ro ,col="black",pch=16,cex=2)
+points(sig.z,mu.z,col="deepskyblue4",pch=15)
+points(sig.t,mu.t,col="goldenrod3",pch=16,cex=2)
+points(sig.pe,mu.pe,col="goldenrod3",pch=16)
+
+text(sigma.min,m.min,labels = "Global Min",pos = 4)
+text(sdfb,mfb,labels="FB",pos=4)
+text(sdamzn,mamzn,labels="AMZN",pos=4)
+text(sdaapl,maapl,labels="AAPL",pos=4)
+
+text(sigma.fb,m.fb,labels="P1",pos=4)
+text(sigma.amzn,m.amzn,labels="P2",pos=4)
+text(sigma.aapl,m.aapl,labels="P3",pos=4)
+
+text(sigma.ro,m.ro,labels="P7",pos=4)
+text(sig.t,mu.t,labels = "portafolio optimo",pos=2)
+```
+
+_____________________________________________________________________________________
+
+## CAPM
+
+Creando matriz de precios al cierre
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+getSymbols("DGS1MO", src="FRED")
+getSymbols("^GSPC",src="yahoo",from = "2018-09-06",to = "2020-09-06")
+TBILL=DGS1MO["2018::2020-09"]
+Assets=cbind(FB$FB.Close,AMZN$AMZN.Close,AAPL$AAPL.Close,GSPC$GSPC.Close)
+
+Assets<-merge(Assets, TBILL)
+index.notNA.GSPC<-which(is.na(coredata(Assets$GSPC.Close))==FALSE)
+Assets<-Assets[index.notNA.GSPC,]
+Assets<-na.locf(Assets)
+apply(is.na(Assets)==TRUE, 2,sum)# Si despu?s de esta funci?n  quedan en ceros, esta bien
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#### Precio de los activos y del fondo diario
+library("zoo")
+colnames(Assets)=c("FB","AMZN","AAPL","GSPC","TBILL")
+
+library ("graphics")
+
+fb=Delt(Assets$FB)[-1]
+amzn=Delt(Assets$AMZN)[-1]
+aapl=Delt(Assets$AAPL)[-1]
+gspc=Delt(Assets$GSPC)[-1]
+tbill=Delt(Assets$TBILL)[-1]
+
+```
+
+#### Calculo de los betas de forma rapida
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+rend2=cbind(gspc,fb,amzn,aapl)
+colnames(rend2)=c("GSPC","FB","AMZN","AAPL")
+
+muhat.vals = as.data.frame(colMeans(rend2))
+rownames(muhat.vals)=c("GSPC","FB","AMZN","AAPL")
+cov.mat = var(rend2)
+
+beta.vals = cov.mat[,1]/cov.mat[1,1]
+beta.vals
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+alpha.vals = muhat.vals[-1,] - beta.vals[-1]*muhat.vals[1,1] #Primera forma de calcularlo
+alpha.vals  #Rendimiento minimo de cada uno
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tbill<-(1+Assets$TBILL)^(1/250)-1
+tbill=tbill[-1]
+```
+
+#### Calculo de los excesos de retorno (over riskfree rate)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+erfb<-fb-tbill
+eramzn<-amzn-tbill
+eraapl<-aapl-tbill
+ergspc<-gspc-tbill
+
+errend=cbind(ergspc,erfb,eramzn,eraapl)
+```
+
+### CAPM de cada uno de los activos
+
+#### - Generando un primer CAPM para FB
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+options(show.signif.stars=FALSE) 
+
+capmfb<-lm(erfb ~ ergspc)
+names(capmfb) 
+summary.lm(capmfb) 
+
+capmfb.summary<-summary(capmfb)
+tstat.intercept<-round(capmfb.summary$coefficients["(Intercept)", "t value"],digits=4)
+```
+
+#### - Generando un primer CAPM para AMZN
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+options(show.signif.stars=FALSE) 
+
+capmamzn<-lm(eramzn ~ ergspc)
+names(capmamzn) 
+summary.lm(capmamzn) 
+
+capmamzn.summary<-summary(capmamzn)
+tstat.intercept<-round(capmamzn.summary$coefficients["(Intercept)", "t value"],digits=4)
+```
+
+#### - Generando un primer CAPM para AAPL
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+options(show.signif.stars=FALSE) 
+
+capmaapl<-lm(eraapl ~ ergspc)
+names(capmaapl) 
+summary.lm(capmaapl) 
+
+capmaapl.summary<-summary(capmaapl)
+tstat.intercept<-round(capmaapl.summary$coefficients["(Intercept)", "t value"],digits=4)
+```
+
+### Graficas de CAPM por accion
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,2))
+
+plot(as.numeric(ergspc), as.numeric(fb),
+     main="FB vs S&P 500", pch=16,col="blue" )
+abline(h=0,v=0)
+abline(capmfb, col=3, lwd=3)
+abline(a=alpha.vals["FB"], b=beta.vals["FB"],
+       col="cadetblue4", lwd=3)
+
+plot(as.numeric(ergspc), as.numeric(amzn),
+     main="AMZN vs S&P 500", pch=16,col="gold" )
+abline(h=0,v=0)
+abline(capmamzn, col=3, lwd=3)
+abline(a=alpha.vals["AMZN"], b=beta.vals["AMZN"],
+       col="cadetblue4", lwd=3)
+
+plot(as.numeric(ergspc), as.numeric(aapl),
+     main="AAPL vs VQNPX", pch=16,col="gray" )
+abline(h=0,v=0)
+abline(capmaapl, col=3, lwd=4)
+abline(a=alpha.vals["AAPL"], b=beta.vals["AAPL"],
+       col="cadetblue4", lwd=2.5)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Beta de cada uno de los activos usando los precios del S&P 500 como indice de mercado
+
+betafb=capmfb$coefficients[2]
+betaamzn=capmamzn$coefficients[2]
+betaaapl=capmaapl$coefficients[2]
+matrizb=c(betafb,betaamzn,betaaapl)
+names(matrizb)=symbols
+matrizb
+```
+
+_____________________________________________________________________________________
+
+## Indice de Treynor
+#### - Para cada uno de los activos
+Podemos concluir que cuanto mayor sea el ratio de Treynor mejor habra sido la gestion del fondo en el pasado.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ITFB=(mfb-TBillmensual)/betafb
+names(ITFB)=("IT FB")
+ITFB
+ITAMZN=(mamzn-TBillmensual)/betaamzn
+names(ITAMZN)=("IT AMZN")
+ITAMZN
+ITAAPL=(maapl-TBillmensual)/betaaapl
+names(ITAAPL)=("IT AAPL")
+ITAAPL
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## Indice de treynor del portafolio
+beta.portafolio=z.mat[,1:3]*matrizb
+options(digits = 3)
+IT.P=(mu.z-rf)/beta.portafolio
+```
+
+#### - Para el portafolio optimo
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+beta.opt=t.vec[1]*betafb+t.vec[2]*betaamzn+t.vec[3]*betaaapl
+
+IT.op=(mu.t-rf)/beta.opt
+IT.op
+```
+
+#### - Para el portafolio minimo global
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+beta.min=wmin[1]*betafb+wmin[2]*betaamzn+wmin[3]*betaaapl
+
+IT.mg=(m.min-rf)/beta.min
+names(IT.mg)=("IT MG")
+IT.mg
+
+```
+
+#### - Para el portafolio de preferencia
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+beta.pp=wro[1]*betafb+wro[2]*betaamzn+wro[3]*betaaapl
+
+IT.pp=(m.ro-rf)/beta.pp
+IT.pp
+
+```
