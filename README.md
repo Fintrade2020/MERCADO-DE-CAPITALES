@@ -21,3 +21,9 @@ Este repositorio consta de un archivo .RMD, en el cual se desarrollan distintos 
 -	Cálculo de excesos de retorno
 -	Índice de Traynor para cada activo y portafolio
 
+### REFERENCIAS SUGERIDAS
+
+- Mishkin, F. S., & Gómez Mont Araiza, J. (2008). Moneda, banca y mercados financieros (No. Sirsi) a453680).
+- Cochrane, J. H. (2009). Asset pricing: Revised edition. Princeton university press.
+- Bodie, Z. et al. (2009). Investments. Tata McGraw-Hill Education.
+- Dumrauf, G. L. (2015). Análisis cuantitativo de bonos. Alfaomega.
